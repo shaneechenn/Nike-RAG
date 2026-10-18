@@ -103,7 +103,28 @@ Queries containing **or / and** (`basketball shoes or volleyball shoes`) are
 split into separate searches and the results interleaved, so every option
 appears at least once.
 
-## Publish (optional)
+## Publish it for free (get a public link)
 
-A `render.yaml` is included for **Render.com**. Push the code to GitHub, then on
-Render: **New + → Blueprint** → connect the repo.
+The easiest free host is **Hugging Face Spaces** (2 CPU / 16 GB RAM — enough for
+the models). You get a public link like
+`https://huggingface.co/spaces/<your-username>/nike-rag`.
+
+1. Create a free account at <https://huggingface.co/join>.
+2. Create a Space at <https://huggingface.co/new-space>: name `nike-rag`,
+   **SDK: Docker**, **template: Blank**, visibility **Public**.
+3. Push this folder to the Space (run from the `nike-rag` folder):
+
+   ```powershell
+   git remote add space https://huggingface.co/spaces/<YOUR-USERNAME>/nike-rag
+   git push space master:main
+   ```
+
+   When asked for a password, use an access token from
+   <https://huggingface.co/settings/tokens> (role: **Write**).
+4. Wait for the build (~10–15 minutes the first time — it installs everything,
+   downloads the two AI models, and builds the search index).
+5. Open your link and share it. The first visit after the Space has been idle
+   may take ~30 seconds to wake up.
+
+The `render.yaml` is kept as an alternative for **Render.com** (note: Render's
+free tier has only 512 MB RAM, which is not enough for these models).

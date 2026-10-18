@@ -1,0 +1,8 @@
+.git
+__pycache__
+*.pyc
+nike.db
+chroma_db/
+run.bat
+setup.ps1
+render.yaml
