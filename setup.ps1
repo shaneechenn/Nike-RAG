@@ -25,12 +25,12 @@ Write-Host "Upgrading pip ..."
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host "Installing project dependencies (this downloads a lot on first run) ..."
-& $env_py -m pip install pandas chromadb sentence-transformers streamlit openai
+& $env_py -m pip install pandas chromadb sentence-transformers fastapi uvicorn
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Write-Host ""
 Write-Host "All done! Next steps:" -ForegroundColor Green
-Write-Host "  1. conda activate nike-rag"
+Write-Host "  1. python fetch_nike.py   (pull products from Nike's API)"
 Write-Host "  2. python load_data.py"
 Write-Host "  3. python embed.py"
-Write-Host "  4. streamlit run app.py"
+Write-Host "  4. run.bat   (or: python -m uvicorn server:app --host 127.0.0.1 --port 8501)"

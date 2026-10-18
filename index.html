@@ -136,7 +136,14 @@
     margin-top: 10px;
     background: var(--card-bg);
   }
-  .product-card .name { font-weight: 650; margin-bottom: 2px; }
+  .product-card .name {
+    font-weight: 650;
+    margin-bottom: 2px;
+    display: block;
+    color: var(--text);
+    text-decoration: none;
+  }
+  .product-card .name:hover { color: var(--blue); text-decoration: underline; }
   .product-card .meta { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
   .product-card .desc { font-size: 14px; opacity: 0.85; }
 
@@ -230,7 +237,7 @@
   <div class="chat">
     <div class="header">
       <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M21.6 7.2c-.4-.4-1.2-.6-2.2-.4-1 .2-2.2.6-3.4 1.2-1.2.6-2.4 1.4-3.6 2.2-1 .7-1.9 1.4-2.7 2.1-.8.7-1.4 1.3-1.8 1.8-.4-.8-.6-1.8-.4-2.8.2-1 .6-1.9 1.2-2.6L3.2 8.2c-1.2 1-2.2 2.2-2.8 3.6-.6 1.4-.8 2.8-.6 4.2.2 1.4.8 2.6 1.8 3.4 1 .8 2.2 1.2 3.4 1.2 1.2 0 2.2-.4 3-1.2.8-.8 1.4-1.8 1.8-3 .4-1.2.6-2.4.6-3.6 0-1 .2-2 .6-3 .4-1 .9-2 1.6-3 .7-1 1.5-1.9 2.4-2.7.9-.8 1.8-1.4 2.6-1.8.8-.4 1.4-.6 1.8-.6.4 0 .6.1.6.3z"/>
+        <path d="M24 7.8L6.442 15.276c-1.456.616-2.679.925-3.668.925-1.12 0-1.933-.392-2.437-1.177-.317-.504-.41-1.143-.28-1.918.13-.775.476-1.6 1.036-2.478.467-.71 1.232-1.643 2.297-2.8a6.122 6.122 0 00-.784 1.848c-.28 1.195-.028 2.072.756 2.632.373.261.886.392 1.54.392.522 0 1.11-.084 1.764-.252L24 7.8z"/>
       </svg>
       <span>Nike Assistant</span>
     </div>
@@ -239,7 +246,7 @@
     </div>
     <div class="input-bar">
       <div class="input-wrap">
-        <input id="query" type="text" placeholder="Ask about a Nike product…" autocomplete="off">
+        <input id="query" type="text" placeholder="Tell me what you want to buy — like &quot;shoes for dad&quot; — or ask me to help you find it" autocomplete="off">
         <button id="send" class="send-btn" aria-label="Send" disabled>
           <svg viewBox="0 0 24 24" width="16" height="16"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z"/></svg>
         </button>
@@ -333,14 +340,16 @@
     function makeProductCard(p) {
       const card = document.createElement('div');
       card.className = 'product-card';
-      const name = document.createElement('div');
+      const name = document.createElement('a');
       name.className = 'name';
       name.textContent = p.title || '';
+      name.href = p.url || '#';
+      name.target = '_blank';
+      name.rel = 'noopener';
       const meta = [];
       if (p.subtitle) meta.push(p.subtitle);
       if (p.color) meta.push(p.color);
       if (p.price != null) meta.push('$' + Number(p.price).toFixed(2));
-      if (p.rating != null) meta.push('⭐ ' + Number(p.rating).toFixed(1) + ' (' + (p.reviews || 0) + ' reviews)');
       const desc = document.createElement('div');
       desc.className = 'desc';
       const d = p.description || '';

@@ -5,7 +5,6 @@ Run:
     uvicorn server:app --host 127.0.0.1 --port 8501
 """
 
-import os
 import re
 
 from fastapi import FastAPI
@@ -22,6 +21,12 @@ _FILLERS = {
     "find", "looking", "to", "of", "in", "and", "or", "with", "good",
     "best", "great", "get", "buy", "give", "can", "you", "your",
     "recommend", "recommendation", "recommendations", "any", "something",
+    # relationship / intent words (not product attributes)
+    "dad", "daddy", "father", "mom", "mommy", "mother", "mum", "son",
+    "daughter", "brother", "sister", "wife", "husband", "boyfriend",
+    "girlfriend", "gift", "gifts", "present", "presents", "man", "men",
+    "woman", "women", "boy", "girl", "kid", "kids", "child", "baby",
+    "toddler",
 }
 
 
@@ -63,7 +68,7 @@ def do_search(q: Query):
     ids = search.hybrid_search(q.query, k=5)
     products = search.get_products(ids)
     results = []
-    for pid, title, subtitle, desc, brand, color, price, rating, reviews in products:
+    for pid, title, subtitle, desc, brand, color, price, url in products:
         results.append(
             {
                 "id": pid,
@@ -73,17 +78,9 @@ def do_search(q: Query):
                 "brand": brand,
                 "color": color,
                 "price": price,
-                "rating": rating,
-                "reviews": reviews,
+                "url": url,
             }
         )
 
-    # Friendly reply: use OpenAI if a key is set, otherwise a template line.
     answer_text = make_template_answer(q.query, len(results))
-    if os.getenv("OPENAI_API_KEY"):
-        try:
-            answer_text = search.answer(q.query, ids)
-        except Exception:
-            pass
-
     return {"products": results, "answer": answer_text}

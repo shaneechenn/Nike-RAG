@@ -1,86 +1,109 @@
 # 👟 Nike Product RAG Assistant
 
-A small chatbot that recommends Nike products using **hybrid search**:
+A chat app that recommends Nike products using **hybrid search**:
 
-- **Keyword search** (SQLite FTS5 / BM25) — finds exact product names like "Nike Air Force 1".
-- **Semantic search** (sentence-transformers + Chroma) — finds meaning, like "a good gift for my mom".
-- **Hybrid** = both, merged with Reciprocal Rank Fusion.
-- Optional **LLM** answer (OpenAI) that writes a friendly recommendation from the top matches.
+- **Keyword search** (SQLite FTS5 + BM25) — matches product words like `shoes`, `red`, or `basketball`.
+- **Semantic search** (sentence-transformers `all-mpnet-base-v2` + Chroma) — understands meaning like `gift for dad`.
+- **Cross-encoder re-ranker** (`ms-marco-MiniLM-L-6-v2`) — re-scores the top candidates for precise relevance.
+- **Recipient-aware routing** — detects who the gift is for ("dad" → men's, "aunt" → women's, "son" → kids') by projecting the query onto the embedding model's gender/age axes. No hard-coded word lists — it generalizes to any word the model knows.
+- **Multi-intent queries** — `basketball shoes or volleyball shoes` returns *both*, `red or blue shoes` returns *both* colors.
 
-## The tech, in one line each
+## Tech stack
 
-| Piece | Tool | What it does |
-|---|---|---|
-| Regular DB + keyword search | SQLite (built into Python) | Stores products + exact-word search |
-| Embeddings | sentence-transformers `all-MiniLM-L6-v2` | Turns text into meaning-vectors |
-| Vector DB | Chroma | Finds the closest-meaning products |
-| Chat UI | Streamlit | The chat box you type into |
-| AI answer (optional) | OpenAI `gpt-4o-mini` | Writes the friendly recommendation |
+| Piece | Tool |
+|---|---|
+| Frontend | HTML + CSS + JavaScript (`index.html`) |
+| Backend | FastAPI (`server.py`) |
+| Keyword search | SQLite FTS5 (BM25, OR-based) |
+| Embeddings | sentence-transformers `all-mpnet-base-v2` (768-dim) |
+| Re-ranker | sentence-transformers `cross-encoder/ms-marco-MiniLM-L-6-v2` |
+| Vector DB | Chroma |
+| Environment | conda env `nike-rag` (Python 3.11) |
+| Product data | Nike's product-feed API (fetched by `fetch_nike.py`) |
 
-## Setup (one time)
+## Run it (easiest)
 
-### 1. Install Miniconda
+Double-click **`run.bat`**, then open **http://localhost:8501** in your browser.
+Keep the black window open; press `Ctrl+C` in it to stop.
 
-If not already installed, run this in PowerShell:
-
-```powershell
-& "$env:USERPROFILE\OneDrive\Documents\deepseek-harness\default-workspace\Miniconda3-latest-Windows-x86_64.exe" /S /InstallationType=JustMe /RegisterPython=0 /AddToPath=1 /D=C:\Users\shane\miniconda3
-```
-
-Then close and reopen PowerShell so `conda` is on your PATH.
-
-### 2. Create the environment and install dependencies
-
-From this `nike-rag` folder:
+Or manually (from the `nike-rag` folder):
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File setup.ps1
+<path>\nike-rag\python.exe -m uvicorn server:app --host 127.0.0.1 --port 8501
 ```
-
-### 3. Put the dataset CSV here
-
-The CSV already lives in `data/nike_data_2022_09.csv` — the **"Nike Products:
-Prices, Descriptions, Reviews"** dataset (Crawl Feeds / Kaggle). `load_data.py`
-auto-detects columns, so it also works with the simpler 3-column dataset if you
-swap it in.
-
-> Columns: `name, sub_title, brand, model, color, price, currency, availability,
-> description, avg_rating, review_count, images, available_sizes` (112 products).
-
-## Running
-
-```powershell
-conda activate nike-rag
-
-python load_data.py     # 1) CSV -> SQLite + keyword index
-python embed.py         # 2) build embeddings -> Chroma (downloads ~90MB model on first run)
-streamlit run app.py    # 3) open the chat UI
-```
-
-Then type either:
-- `I want the Nike Air Force 1s`
-- `what's a good gift for my mom?`
-
-### Optional: turn on the AI-written answer
-
-```powershell
-$env:OPENAI_API_KEY = "sk-..."
-streamlit run app.py
-```
-
-Without a key, the app still works — it just shows the ranked product list
-without a written recommendation.
 
 ## Project layout
 
 ```
 nike-rag/
-  load_data.py   # CSV -> SQLite (products + FTS5 keyword index)
-  embed.py       # text -> embeddings -> Chroma vector DB
-  search.py      # keyword / semantic / hybrid / LLM answer
-  app.py         # Streamlit chat UI
-  setup.ps1      # creates the conda env + installs deps
+  index.html        # the chat UI (HTML/CSS/JS)
+  server.py         # FastAPI backend (serves the page + /search)
+  search.py         # keyword / semantic / cross-encoder / recipient routing
+  load_data.py      # CSV -> SQLite + FTS5 keyword index
+  embed.py          # text -> vectors -> Chroma
+  fetch_nike.py     # pulls the product catalog from Nike's API
+  make_avatars.py   # generates the chat avatars (optional)
+  user_avatar.png   # chat avatars (used by index.html)
+  assistant_avatar.png
+  run.bat           # double-click to launch
+  setup.ps1         # creates the conda env + installs deps
   requirements.txt
-  nike.db        # created by load_data.py (regular DB)
-  chroma_db/     # created by embed.py (vector DB)
+  render.yaml       # Render.com deploy config
+  data/nike_catalog.csv  # the catalog (1,891 products, fetched from Nike's API)
+  nike.db           # built by load_data.py (regular DB)
+  chroma_db/        # built by embed.py (vector DB)
 ```
+
+## Setup from scratch (only if moving to a new machine)
+
+### 1. Install Miniconda
+
+```powershell
+& "$env:USERPROFILE\OneDrive\Documents\deepseek-harness\default-workspace\Miniconda3-latest-Windows-x86_64.exe" /S /InstallationType=JustMe /RegisterPython=0 /AddToPath=1 /D=C:\Users\shane\miniconda3
+```
+
+Then close and reopen PowerShell.
+
+### 2. Create the environment + install dependencies
+
+From the `nike-rag` folder:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup.ps1
+```
+
+### 3. Fetch the catalog + build the search index
+
+```powershell
+<path>\nike-rag\python.exe fetch_nike.py   # pulls products from Nike's API
+<path>\nike-rag\python.exe load_data.py    # CSV -> SQLite + FTS5
+<path>\nike-rag\python.exe embed.py        # text -> vectors -> Chroma
+```
+
+> First run downloads two models: `all-mpnet-base-v2` (~420 MB) and the
+> cross-encoder (~80 MB). They are cached afterwards.
+
+## How the search works
+
+For a query like `shoes for dad`:
+
+1. **Keyword** — extracts content words (drops fillers like "for", "a", "gift"),
+   matches them against titles, subtitles, descriptions **and colors** with
+   SQLite FTS5 (OR + BM25) — so `red or blue shoes` matches real colorways.
+2. **Semantic re-rank** — re-orders the keyword candidates by cosine similarity
+   with the query embedding (`all-mpnet-base-v2`).
+3. **Recipient detection** — projects each query word onto the model's
+   gender/age axes ("dad" → male+adult, "aunt" → female+adult, "son" → child).
+   If a recipient is detected, matching products (by Nike's own MEN/WOMEN/KIDS
+   label) are pulled in and ranked first.
+4. **Cross-encoder** — re-scores the top ~20 candidates with
+   `ms-marco-MiniLM-L-6-v2` for final relevance ordering.
+
+Queries containing **or / and** (`basketball shoes or volleyball shoes`) are
+split into separate searches and the results interleaved, so every option
+appears at least once.
+
+## Publish (optional)
+
+A `render.yaml` is included for **Render.com**. Push the code to GitHub, then on
+Render: **New + → Blueprint** → connect the repo.

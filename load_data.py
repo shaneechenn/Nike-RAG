@@ -1,9 +1,8 @@
 """
 PHASE 1 — Load the Nike CSV into SQLite and build the keyword-search index.
 
-Works with the rich "Nike Products: Prices, Descriptions, Reviews" dataset
-(name, sub_title, brand, color, price, avg_rating, review_count, raw_description, ...)
-and also falls back to the simple 3-column dataset (Title, Subtitle, Product Description).
+Works with the Nike API catalog (title, subtitle, gender, product_type, price,
+color, brand, sport) and older datasets (Title/Subtitle/Product Description).
 
 Run once:
     python load_data.py
@@ -30,7 +29,6 @@ def find_csv():
 
 
 def strip_html(text):
-    """Remove HTML tags and decode entities (raw_description is often HTML)."""
     if not text:
         return ""
     text = re.sub(r"<[^>]+>", " ", str(text))
@@ -64,24 +62,23 @@ def main():
                 return lower[n]
         return None
 
-    # Flexible mapping: rich dataset first, then the simple one.
     title_col = pick("name", "product name", "title", "product title", "product_title")
     subtitle_col = pick("sub_title", "subtitle")
     desc_col = pick("description", "raw_description", "product description")
     brand_col = pick("brand")
     color_col = pick("color")
+    gender_col = pick("gender")
+    type_col = pick("product_type", "product type")
+    sport_col = pick("sport")
+    url_col = pick("url")
     model_col = pick("model", "sku", "product id")
     price_col = pick("price", "sale price", "listing price")
-    rating_col = pick("avg_rating", "rating")
-    reviews_col = pick("review_count", "reviews", "review count")
 
     if title_col is None:
         title_col = df.columns[0]
-    if desc_col is None and len(df.columns) >= 3:
-        desc_col = df.columns[2]
 
     print(f"Using -> title: {title_col!r}, subtitle: {subtitle_col!r}, "
-          f"description: {desc_col!r}, price: {price_col!r}, rating: {rating_col!r}")
+          f"gender: {gender_col!r}, price: {price_col!r}")
 
     def get(row, col):
         if col is None:
@@ -101,15 +98,17 @@ def main():
             description TEXT,
             brand TEXT,
             color TEXT,
+            gender TEXT,
+            product_type TEXT,
+            sport TEXT,
+            url TEXT,
             price REAL,
-            avg_rating REAL,
-            review_count INTEGER,
             combined_text TEXT
         )
         """
     )
     conn.execute(
-        "CREATE VIRTUAL TABLE products_fts USING fts5(title, subtitle, description)"
+        "CREATE VIRTUAL TABLE products_fts USING fts5(title, subtitle, description, color)"
     )
 
     n = 0
@@ -119,30 +118,31 @@ def main():
         desc = strip_html(get(r, desc_col))
         brand = str(get(r, brand_col) or "").strip()
         color = str(get(r, color_col) or "").strip()
+        gender = str(get(r, gender_col) or "").strip()
+        ptype = str(get(r, type_col) or "").strip()
+        sport = str(get(r, sport_col) or "").strip()
         model = str(get(r, model_col) or "").strip()
         price = to_float(get(r, price_col))
-        rating = to_float(get(r, rating_col))
-        reviews_raw = get(r, reviews_col)
-        try:
-            reviews = int(float(reviews_raw)) if reviews_raw is not None else None
-        except (ValueError, TypeError):
-            reviews = None
 
-        # Weight title/subtitle more (they carry the strongest "what is this /
-        # who it's for" signal) and truncate the long marketing description.
-        short_desc = (desc or "")[:220]
-        parts = [title, title, subtitle, subtitle, brand, color, model, short_desc]
+        # Weight title/subtitle more; include gender/type/sport for semantics.
+        gender_clean = gender.replace("|", " ")
+        url = str(get(r, url_col) or "").strip()
+        short_desc = (desc or "")[:200]
+        parts = [title, title, subtitle, subtitle, gender_clean, ptype, sport,
+                 brand, color, model, short_desc]
         combined = " . ".join(x for x in parts if x)
 
         cur = conn.execute(
-            "INSERT INTO products (title, subtitle, description, brand, color, "
-            "price, avg_rating, review_count, combined_text) VALUES (?,?,?,?,?,?,?,?,?)",
-            (title, subtitle, desc, brand, color, price, rating, reviews, combined),
+            "INSERT INTO products (title, subtitle, description, brand, color, gender, "
+            "product_type, sport, url, price, combined_text) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (title, subtitle, desc, brand, color, gender, ptype, sport, url,
+             price, combined),
         )
         conn.execute(
-            "INSERT INTO products_fts (rowid, title, subtitle, description) "
-            "VALUES (?,?,?,?)",
-            (cur.lastrowid, title, subtitle, desc),
+            "INSERT INTO products_fts (rowid, title, subtitle, description, color) "
+            "VALUES (?,?,?,?,?)",
+            (cur.lastrowid, title, subtitle, desc, color),
         )
         n += 1
 
