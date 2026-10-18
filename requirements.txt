@@ -1,5 +1,6 @@
 pandas
 chromadb
+sentence-transformers
 openai
 fastapi
 uvicorn

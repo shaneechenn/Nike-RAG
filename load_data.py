@@ -49,18 +49,6 @@ def to_float(v):
         return None
 
 
-def detect_gender(text):
-    """Extract a gender signal from text like "Men's Shoes"."""
-    t = (text or "").lower()
-    if "women" in t or "woman" in t or "girl" in t or "ladies" in t:
-        return "women"
-    if "men" in t or "boy" in t or "man" in t:
-        return "men"
-    if "kid" in t or "toddler" in t or "baby" in t or "child" in t or "infant" in t or "youth" in t:
-        return "kids"
-    return None
-
-
 def main():
     csv_path = find_csv()
     print(f"Reading {csv_path} ...")
@@ -116,7 +104,6 @@ def main():
             price REAL,
             avg_rating REAL,
             review_count INTEGER,
-            gender TEXT,
             combined_text TEXT
         )
         """
@@ -141,8 +128,6 @@ def main():
         except (ValueError, TypeError):
             reviews = None
 
-        gender = detect_gender(subtitle) or detect_gender(title)
-
         # Weight title/subtitle more (they carry the strongest "what is this /
         # who it's for" signal) and truncate the long marketing description.
         short_desc = (desc or "")[:220]
@@ -151,8 +136,8 @@ def main():
 
         cur = conn.execute(
             "INSERT INTO products (title, subtitle, description, brand, color, "
-            "price, avg_rating, review_count, gender, combined_text) VALUES (?,?,?,?,?,?,?,?,?,?)",
-            (title, subtitle, desc, brand, color, price, rating, reviews, gender, combined),
+            "price, avg_rating, review_count, combined_text) VALUES (?,?,?,?,?,?,?,?,?)",
+            (title, subtitle, desc, brand, color, price, rating, reviews, combined),
         )
         conn.execute(
             "INSERT INTO products_fts (rowid, title, subtitle, description) "

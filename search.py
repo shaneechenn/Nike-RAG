@@ -2,7 +2,7 @@
 PHASES 2, 4, 5 — the three kinds of search + the AI answer.
 
 - keyword_search() : exact words, via SQLite FTS5 (BM25 ranking).
-- semantic_search(): meaning, via Chroma (ONNX all-MiniLM-L6-v2).
+- semantic_search(): meaning, via sentence-transformers (all-mpnet-base-v2).
 - hybrid_search()  : both, merged with Reciprocal Rank Fusion (RRF).
 - answer()         : (optional) an LLM writes a friendly recommendation.
 
@@ -15,20 +15,21 @@ import re
 import sqlite3
 
 import chromadb
-from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+from sentence_transformers import SentenceTransformer
 
 DB_PATH = "nike.db"
 CHROMA_DIR = "chroma_db"
+MODEL_NAME = "all-mpnet-base-v2"
 
-_ef = None
+_model = None
 _collection = None
 
 
-def get_embedding_function():
-    global _ef
-    if _ef is None:
-        _ef = DefaultEmbeddingFunction()
-    return _ef
+def get_model():
+    global _model
+    if _model is None:
+        _model = SentenceTransformer(MODEL_NAME)
+    return _model
 
 
 def get_collection():
@@ -43,18 +44,36 @@ def _conn():
     return sqlite3.connect(DB_PATH)
 
 
+_STOPWORDS = {
+    "a", "an", "the", "for", "of", "in", "on", "at", "to", "and", "or",
+    "is", "are", "was", "were", "be", "been", "am", "i", "you", "he",
+    "she", "it", "we", "they", "me", "my", "your", "his", "her", "our",
+    "their", "this", "that", "these", "those", "want", "wanna", "need",
+    "looking", "please", "some", "best", "good", "great", "show", "find",
+    "get", "buy", "give", "can", "with", "what", "whats", "do", "does",
+    "should", "would", "could", "like", "just", "any", "something",
+    "recommend", "recommendation", "recommendations", "gift", "gifts",
+}
+
+
 def keyword_search(query, k=10):
-    """Find products containing the literal words of the query."""
-    words = re.findall(r"[A-Za-z0-9]+", query)
-    if not words:
+    """Find products matching the query's content words (OR + BM25).
+
+    Uses OR (not AND) so "shoes for dad" matches products containing
+    "shoes", while filler/intent words like "for", "dad" are left to the
+    semantic side. BM25 ranks the rare, meaningful words highest.
+    """
+    words = re.findall(r"[A-Za-z0-9]+", query.lower())
+    terms = [w for w in words if w not in _STOPWORDS]
+    if not terms:
         return []
-    terms = " AND ".join(f'"{w}"' for w in words)
+    q = " OR ".join(f'"{w}"' for w in terms)
     try:
         conn = _conn()
         rows = conn.execute(
             "SELECT p.id FROM products_fts f JOIN products p ON p.id = f.rowid "
             "WHERE products_fts MATCH ? ORDER BY bm25(products_fts) LIMIT ?",
-            (terms, k),
+            (q, k),
         ).fetchall()
         conn.close()
         return [r[0] for r in rows]
@@ -64,62 +83,27 @@ def keyword_search(query, k=10):
 
 
 def semantic_search(query, k=10):
-    """Find products whose *meaning* is closest to the query."""
-    ef = get_embedding_function()
-    qvec = ef([query])[0]
+    """Return the k products whose *meaning* is closest to the query."""
+    qvec = get_model().encode(query).tolist()
     res = get_collection().query(
         query_embeddings=[qvec], n_results=k, include=["metadatas"]
     )
     return [m["pid"] for m in res["metadatas"][0]]
 
 
-_MALE = ["dad", "daddy", "father", "husband", "boyfriend", "him", "his", "men",
-         "mens", "man", "son", "brother", "boy", "male", "guy"]
-_FEMALE = ["mom", "mommy", "mother", "mum", "wife", "girlfriend", "her", "hers",
-           "women", "womens", "woman", "daughter", "sister", "girl", "female"]
-_KIDS = ["kid", "kids", "child", "toddler", "baby", "infant", "youth", "newborn"]
-
-
-def detect_query_gender(query):
-    """Infer a gender intent from the query (e.g. 'dad' -> men, 'mom' -> women)."""
-    t = " " + (query or "").lower() + " "
-    if any(w in t for w in _FEMALE):
-        return "women"
-    if any(w in t for w in _MALE):
-        return "men"
-    if any(w in t for w in _KIDS):
-        return "kids"
-    return None
-
-
-def _gender_rerank(pids, q_gender):
-    """Push matching-gender (and unisex) products to the top, mismatches down."""
-    conn = _conn()
-    gender_map = dict(conn.execute("SELECT id, gender FROM products").fetchall())
-    conn.close()
-
-    def key(pid):
-        g = gender_map.get(pid)
-        return 0 if (g == q_gender or g is None) else 1
-
-    return sorted(pids, key=key)
-
-
 def hybrid_search(query, k=10):
-    """Merge keyword + semantic results with RRF, then gender-aware re-rank."""
-    kw = keyword_search(query, k)
-    sem = semantic_search(query, k)
+    """Merge keyword + semantic results with Reciprocal Rank Fusion.
+
+    Retrieves a larger semantic pool (top 30) so the fusion has more
+    candidates to choose from before trimming down to k.
+    """
+    kw = keyword_search(query, max(k * 6, 30))
+    sem = semantic_search(query, max(k * 6, 30))
     score = {}
     for id_list in (kw, sem):
         for rank, pid in enumerate(id_list):
             score[pid] = score.get(pid, 0) + 1.0 / (60 + rank + 1)
-    ranked = sorted(score, key=score.get, reverse=True)
-
-    q_gender = detect_query_gender(query)
-    if q_gender:
-        ranked = _gender_rerank(ranked, q_gender)
-
-    return ranked[:k]
+    return sorted(score, key=score.get, reverse=True)[:k]
 
 
 def get_products(ids):
