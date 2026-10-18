@@ -1,0 +1,5 @@
+pandas
+chromadb
+openai
+fastapi
+uvicorn

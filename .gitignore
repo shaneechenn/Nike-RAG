@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+*.exe
+nike.db
+chroma_db/
